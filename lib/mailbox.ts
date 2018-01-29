@@ -48,25 +48,26 @@ class Queue{
 }
 
 class Mailbox{
-    private _inputQ:Queue;
-    private _outputQ:Queue;
+    private _inputQ: Array< Array<Buffer>> ;
+    private _outputQ: Array< Array<Buffer>> ;
+
     private _maxInputQLen:number;
     private _maxOutputQLen:number;
 
     private _netEngine:NetEngine;
     private _session:Session;
-
+    private _sending:boolean;
     constructor(session:Session, netEngine:NetEngine, maxInputQLen:number = 0, maxOutputQLen:number=0){
 
         let self = this;
         this._maxInputQLen = maxInputQLen;
         this._maxOutputQLen = maxOutputQLen;
-        this._inputQ = new Queue();
-        this._outputQ= new Queue();
+        this._inputQ = new Array< Array<Buffer> >();
+        this._outputQ= new Array< Array<Buffer> >();
         this._session = session;
         this._session.setMailBox(this);
-        this.netEngine = netEngine;
-
+        this._netEngine = netEngine;
+        this._sending = false;
 
     }
     get netEngine():NetEngine{
@@ -84,37 +85,52 @@ class Mailbox{
     }
     private queueSend(){
         let self=this; 
-        let node= this._outputQ.getHead();
-        if( node != null && self._netEngine != null ){
-            self._netEngine.send( node.data, ()=>{
-                self._outputQ.remove();
-                self.queueSend();
-            })
-        }
+//        let node= this._outputQ.getHead();
 
+        if( this._outputQ.length > 0  && this._sending == false && self._netEngine != null ){
+            this._sending = true;
+            let output = this._outputQ;
+            this._outputQ = [];
+            let count = output.length;
+
+            for (let idx = 0; idx < output.length ; idx++) {
+                self._netEngine.send(output[idx], () => {
+                    count++;
+                    if( count == output.length ){
+                        this._sending = false;
+                        this.queueSend();
+                    }
+                })
+            }
+        }
     }
     private queueRecv(){
         let self=this; 
-        let node= this._inputQ.getHead();
-        if( node != null ){
-            self._session.recv( node.data, ()=>{
-                self._inputQ.remove();
-                self.queueRecv();
+        let queue = this._inputQ;
+        if( queue.length > 0 && self._netEngine != null ) {
+            this._inputQ = [];
+            queue.forEach((buffer)=>{
+                self._session.recv( buffer,()=>{
+                    self.queueRecv();
+                }) 
+
             })
+
         }
-    }
-    send(data:Buffer):boolean {
+        
+   }
+    send(data:Array<Buffer>):boolean {
        /* if(this._maxOutputQLen == 0  ){
             this._netEngine.send(data);
             return true;
         }else 
         */
-        if(this._maxOutputQLen <= this._outputQ.count){
+        if(this._maxOutputQLen <= this._outputQ.length ){
             //to do. logger.
             return false;
         }else{
-            this._outputQ.add( new QueueNode(data) );
-            if( this._outputQ.count == 1 ){
+            this._outputQ.push( data );
+            if( this._outputQ.length == 1 ){
                 this.queueSend( )
             }
         }
@@ -123,15 +139,15 @@ class Mailbox{
     recv(data:Buffer):boolean{
         console.log("mailbox recv:",data);
         if( this._maxInputQLen == 0 ){
-            this._session.recv(data );
+            this._session.recv( data );
             return true;
-        }else if(this._maxInputQLen <= this._inputQ.count){
+        }else if(this._maxInputQLen <= this._inputQ.length){
             //to do.logger;
             console.error(` recv too much data:maxLen:${this._maxInputQLen} `)
             return false;
         }else{
-            this._inputQ.add( new QueueNode(data) );
-            if( this._inputQ.count == 1){
+            this._inputQ.push( data );
+            if( this._inputQ.length == 1){
                 this.queueRecv();
             }
         }

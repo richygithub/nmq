@@ -1,22 +1,30 @@
-import Buffer=require('buffer');
+import {Buffer} from 'buffer';
 import net = require('net');
 import Event = require('events');
+import {Coder,Coder_v1} from './coder';
 interface NetEngine extends Event{
 
-    decode(data:Buffer);
+//    decode(data:Buffer);
 
-    send(data:Buffer,cb?:()=>void);
+    send(data: Array<Buffer>,cb:Function ) ;
+    
 }
+
+
 
 class TcpEngine  extends Event implements NetEngine{
     private _socket:net.Socket;
+    private _coder:Coder;
 
     constructor(socket:net.Socket){
         super();
-        this._socket= socket;
+        this._coder= new Coder_v1(this);
 
+        this._socket= socket;
         let self = this;
-        socket.on('data', this.decode.bind(this));
+
+        
+        socket.on('data', this._coder.decode.bind(this._coder));
         socket.on('error',()=>{
 
         })
@@ -24,16 +32,26 @@ class TcpEngine  extends Event implements NetEngine{
             self.emit('close',err);
         })
 
+        this.on('msg',(data:Array<Buffer>)=>{
+
+        })
     }
 
-    decode(data:Buffer){
-        // simple:
-        this.emit('data',data);
-    }
 
+    /*
     send(data:Buffer,cb?:()=>void){
         console.log("tcp send:",data.length);
         this._socket.write(data,cb);
+    }
+    */
+
+    send(data: Array<Buffer>,cb:Function){
+        let buf = this._coder.encode( data);
+        if( buf == null ){
+            cb();
+        }else{
+            this._socket.write(buf,cb);
+        }
     }
 
 }
@@ -49,7 +67,7 @@ class UdpEngine  extends Event implements NetEngine{
         this.emit('data',data);
     }
 
-    send(data:Buffer,cb?:()=>void){
+    send(data: Array<Buffer>,cb:Function){
 //        this._socket.write(data,cb);
     }
 
