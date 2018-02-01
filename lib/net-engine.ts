@@ -6,7 +6,7 @@ interface NetEngine extends Event{
 
 //    decode(data:Buffer);
 
-    send(data: Array<Buffer>,cb:Function ) ;
+    send(data: Array<Buffer>,cb:Function ):boolean ;
     
 }
 
@@ -31,10 +31,6 @@ class TcpEngine  extends Event implements NetEngine{
         socket.on('close',(err)=>{
             self.emit('close',err);
         })
-
-        this.on('msg',(data:Array<Buffer>)=>{
-
-        })
     }
 
 
@@ -45,12 +41,14 @@ class TcpEngine  extends Event implements NetEngine{
     }
     */
 
-    send(data: Array<Buffer>,cb:Function){
+    send(data: Array<Buffer>,cb:Function):boolean{
         let buf = this._coder.encode( data);
         if( buf == null ){
             cb();
+            return false;
         }else{
             this._socket.write(buf,cb);
+            return true;
         }
     }
 
@@ -67,10 +65,12 @@ class UdpEngine  extends Event implements NetEngine{
         this.emit('data',data);
     }
 
-    send(data: Array<Buffer>,cb:Function){
+    send(data: Array<Buffer>,cb:Function):boolean{
 //        this._socket.write(data,cb);
+        return true;
     }
 
 }
+
 
 export {NetEngine,TcpEngine,UdpEngine};

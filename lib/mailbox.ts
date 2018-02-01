@@ -66,7 +66,7 @@ class Mailbox{
         this._outputQ= new Array< Array<Buffer> >();
         this._session = session;
         this._session.setMailBox(this);
-        this._netEngine = netEngine;
+        this.netEngine = netEngine;
         this._sending = false;
 
     }
@@ -76,7 +76,8 @@ class Mailbox{
     set netEngine(netEngine:NetEngine){
         if( !this._netEngine && !!netEngine ){
             this._netEngine = netEngine
-            this._netEngine.on('data',this.recv.bind(this) );
+            this._netEngine.on('msg',this.recv.bind(this) );
+
             this._netEngine.on('close',(err)=>{
                 this._session.onClose(err);
             });
@@ -91,7 +92,7 @@ class Mailbox{
             this._sending = true;
             let output = this._outputQ;
             this._outputQ = [];
-            let count = output.length;
+            let count = 0;
 
             for (let idx = 0; idx < output.length ; idx++) {
                 self._netEngine.send(output[idx], () => {
@@ -109,12 +110,15 @@ class Mailbox{
         let queue = this._inputQ;
         if( queue.length > 0 && self._netEngine != null ) {
             this._inputQ = [];
-            queue.forEach((buffer)=>{
-                self._session.recv( buffer,()=>{
-                    self.queueRecv();
+            let count=0; 
+            for( let idx=0; idx<queue.length;idx++){
+                self._session.recv( queue[idx],()=>{
+                    count++;
+                    if( count == queue.length ){
+                        self.queueRecv();
+                    }
                 }) 
-
-            })
+            }
 
         }
         
@@ -133,10 +137,11 @@ class Mailbox{
             if( this._outputQ.length == 1 ){
                 this.queueSend( )
             }
+            return true;
         }
     }
 
-    recv(data:Buffer):boolean{
+    recv(data:Array<Buffer>):boolean{
         console.log("mailbox recv:",data);
         if( this._maxInputQLen == 0 ){
             this._session.recv( data );

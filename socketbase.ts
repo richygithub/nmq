@@ -46,9 +46,9 @@ class Router implements SocketBase{
     private _port:number;
     private _sessions:Map<string,Session>;
     private _serialId:number;
-    private _packetHandler:(data:Buffer)=>void;
+    private _packetHandler:(data:Array<Buffer>)=>void;
     
-    constructor(type:NetProto,host:string,port:number,packetHandler:(data:Buffer)=>void ){
+    constructor(type:NetProto,host:string,port:number,packetHandler:(data:Array<Buffer>)=>void ){
         this._netProto = type;
         this._host = host;
         this._port = port;
@@ -64,6 +64,9 @@ class Router implements SocketBase{
         }
         return session.send(data,cb );
     }
+    recv(data:Array<Buffer>,session:Session){
+
+    }
     bind(){
         let self=this;
         if( self._netProto == NetProto.TCP ){
@@ -73,7 +76,7 @@ class Router implements SocketBase{
                 
                 let netEngine = new TcpEngine(socket);
 
-                let session = new Session(this._packetHandler);
+                let session = new Session(this);
                 let mailbox = new Mailbox(session,netEngine,10,10 );
                 session.setMailBox(mailbox);
                 
@@ -97,7 +100,7 @@ class Router implements SocketBase{
                     //recv 
                     session.netEngine.decode(msg);
                 }else{
-                    session = new Session(this._packetHandler);
+                    session = new Session(this);
                     let netEngine = new UdpEngine();
                     let mailbox = new Mailbox(session,netEngine,10,10);
                     self._sessions[info.address] =session;
@@ -140,7 +143,7 @@ class Dealer implements SocketBase{
     private _connected:boolean;
     private _rpcId:number;
 
-    private _packetHandler:(data:Buffer)=>void;
+    private _packetHandler:(data:Array<Buffer>)=>void;
 
 //    private _cbs:Map<number,(err:Error,reply:RpcMsg)=>void >;
     private _cbs:Map<number,RpcCB>;
@@ -151,7 +154,7 @@ class Dealer implements SocketBase{
 
     
 
-    constructor(type:NetProto,host:string,port:number,packetHandler:(data:Buffer)=>void){
+    constructor(type:NetProto,host:string,port:number,packetHandler:(data:Array<Buffer>)=>void){
         this._netProto = type;
         this._host = host;
         this._port = port;
@@ -174,7 +177,7 @@ class Dealer implements SocketBase{
         }
         this.send( [  Buffer.from( JSON.stringify(header) ), msg.toBuf() ] )
     }
-    req(msg:RpcMsg,cb:(err:Error,reply:RpcMsg)=>void){
+    req1(msg:RpcMsg,cb:(err:Error,reply:RpcMsg)=>void){
 
         let rpcId = this._rpcId;
         let header={
@@ -195,8 +198,33 @@ class Dealer implements SocketBase{
         },10000),
 
         this._rpcId++;
-
     }
+
+    req(msg: RpcMsg) {
+        return new Promise((resolve) => {
+            let rpcId = this._rpcId;
+            let header = {
+                rpcId: rpcId,
+                serviceId: msg.id()
+            }
+            this.send([Buffer.from(JSON.stringify(header)), msg.toBuf()]);
+
+            this._cbs[rpcId] = resolve;
+            this._cbsTimer[rpcId] = setTimeout(() => {
+                //
+                this._cbsTimer[rpcId] = null;
+
+                if (!!this._cbs[rpcId]) {
+                    this._cbs[rpcId].cb(new Error("time out"), null);
+                    this._cbs[rpcId] = null;
+                }
+            }, 10000),
+
+                this._rpcId++;
+
+        })
+    }
+
     recv(data:Array<Buffer>){
         // to do ,head include error.
         let header = JSON.parse( data[0].toString('utf8') );
@@ -218,7 +246,7 @@ class Dealer implements SocketBase{
             self._status = NetStatus.Connecting;
 
 
-            this._session = new Session( this._packetHandler);
+            this._session = new Session( this);
             let mailbox = new Mailbox(this._session,null,10,10);
 
             let socket = net.connect(this._port,this._host,()=>{
@@ -239,7 +267,7 @@ class Dealer implements SocketBase{
             //notice .. server always use tcp.
             this._socket = dgram.createSocket('udp4');
             this._status = NetStatus.Connected;
-            this._session = new Session(this._packetHandler);
+            this._session = new Session(this);
             let netEngine = new UdpEngine();
             let mailbox = new Mailbox(this._session,netEngine,10,10);
  

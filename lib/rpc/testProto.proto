@@ -1,14 +1,26 @@
 syntax = "proto3";
  
 package testPackage;
- 
-service testService {
-  rpc ping (pingRequest:json ) returns (pingReply:pb) {}
-}
- 
+
 message pingRequest {
+  int32 id = 1;
 }
  
 message pingReply {
   string message = 1;
 }
+
+service Area{
+
+  ns Player{
+    rpc ping (pingRequest msg) return (pingReply) {}
+
+  }
+
+  ns Scene{
+    rpc enter(int32 id ) return (pingReply ) {}
+
+  }
+  
+}
+ 

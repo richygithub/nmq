@@ -26,6 +26,7 @@ class Coder_v1 implements Coder {
     constructor( receiver:Event, maxMsgLen:number = 1024*1024 ){
         this._receiver = receiver;
         this._maxMsgLen =  maxMsgLen;
+        this.reset();
     }
     reset(){
         this._status =  ST_READ_LENGTH;
@@ -82,6 +83,7 @@ class Coder_v1 implements Coder {
 
         while (offset < data.length) {
             let len = data.readUInt16BE(offset);
+            offset+=2;
             buf.push(Buffer.from(data.buffer, offset, len));
             offset += len;
         }
@@ -91,7 +93,8 @@ class Coder_v1 implements Coder {
     decode(data: Buffer){
         // simple:
         if (this._status === ST_ERROR) {
-            throw new Error('compose in error state, reset it first');
+//            throw new Error('compose in error state, reset it first');
+            this._receiver.emit('msg_err',new Error('status error.'));
         }
 
         let offset = 0;
@@ -128,7 +131,7 @@ class Coder_v1 implements Coder {
         }
 
         let buf = Buffer.alloc(pkgLen);
-        buf.writeUInt32BE( pkgLen,0);
+        buf.writeUInt32BE( pkgLen-4,0);
 
         let offset = 4 ;
         for (let idx=0; idx < data.length ; idx++) {
