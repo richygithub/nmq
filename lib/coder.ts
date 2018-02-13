@@ -119,7 +119,6 @@ class Coder_v1 implements Coder {
         let pkgLen =0 ;
         data.forEach( (buf)=>{
             pkgLen += buf.length;
-
         })
         pkgLen += data.length*2; // header length
         pkgLen += 4; //msg length;

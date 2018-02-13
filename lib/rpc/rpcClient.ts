@@ -9,6 +9,7 @@ import {Mailbox} from '../mailbox';
 import {NetEngine,TcpEngine,UdpEngine} from '../net-engine';
 import {NetProto} from '../../socketbase'
 import { setTimeout } from 'timers';
+import { resolve } from 'url';
 
 
 class RpcClient implements Receiver{
@@ -22,7 +23,6 @@ class RpcClient implements Receiver{
     private _connected:boolean;
     private _rpcId:number;
 
-    private _packetHandler:(data:Array<Buffer>)=>void;
 
 //    private _cbs:Map<number,(err:Error,reply:RpcMsg)=>void >;
     private _cbs:Map<number,any>;
@@ -33,7 +33,7 @@ class RpcClient implements Receiver{
 
     
 
-    constructor(type:NetProto,host:string,port:number,packetHandler:(data:Array<Buffer>)=>void){
+    constructor(type:NetProto,host:string,port:number){
         this._netProto = type;
         this._host = host;
         this._port = port;
@@ -41,7 +41,6 @@ class RpcClient implements Receiver{
 
         this._connected= false;
 
-        this._packetHandler = packetHandler;
         this._rpcId=0;
 //        this._cbs = new Map<number, (err:Error,reply:RpcMsg)=>void>();
         this._cbs = new Map<number,any>();
@@ -62,8 +61,8 @@ class RpcClient implements Receiver{
     }
 
 
-    req(serviceId:number, data:Buffer , deserialize:(data:Buffer)=>any ) {
-        return new Promise((resolve) => {
+    transfer(serviceId:number,data:Buffer,deserialize:(data:Buffer)=>any){
+        return new Promise(resolve =>{
             let rpcId = this._rpcId;
             let header = {
                 rpcId: rpcId,
@@ -86,17 +85,42 @@ class RpcClient implements Receiver{
         })
     }
 
+    req(serviceId:number, data:Buffer , deserialize:(data:Buffer)=>any ):Promise<[any,Error]> {
+        return new Promise((resolve) => {
+            let rpcId = this._rpcId;
+            let header = {
+                rpcId: rpcId,
+                serviceId:serviceId,
+                type:"remote"
+            }
+            this.send([Buffer.from(JSON.stringify(header)), data]);
+
+            this._cbs[rpcId] = {resolve,deserialize};
+            this._cbsTimer[rpcId] = setTimeout(() => {
+                //
+                this._cbsTimer[rpcId] = null;
+
+                if (!!this._cbs[rpcId]) {
+                    this._cbs[rpcId].resolve( [null, new Error("time out")] );
+                    this._cbs[rpcId] = null;
+                }
+            }, 10000),
+
+            this._rpcId++;
+        })
+    }
+
     recv(data:Array<Buffer>,session:Session){
         // to do ,head include error.
         let header = JSON.parse( data[0].toString('utf8') );
         let rpc= this._cbs[header.rpcId];
         if( !!rpc){
             //to pro
-            if( !!header.error ){
-                rpc.cb(new Error(header.error),null );
+            if( !!header.err){
+                rpc.resolve([ null,new Error(header.err)]);
             }else{
                 let body = data[1];
-                rpc.resolve( rpc.deserialize(body) );
+                rpc.resolve( [rpc.deserialize(body),null] );
             }
         }
     }
